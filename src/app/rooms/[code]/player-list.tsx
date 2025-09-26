@@ -4,9 +4,11 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {leaveRoom, startGame } from "@/app/actions"
 import { useRouter } from "next/navigation"
 import { useGameStore } from "@/stores/game-store"
+import { Type, Users, Play, LogOut, Copy, Check } from "lucide-react"
 
 interface PlayerListProps {
     code: string,
@@ -18,6 +20,17 @@ export default function PlayerList({ code, initialPlayers }: PlayerListProps) {
     const API_URL = process.env.NEXT_PUBLIC_API_URL
     const router = useRouter()
     const [playerId, setPlayerId] = useState<string | null>(null)
+    const [copiedCode, setCopiedCode] = useState(false)
+
+    const copyRoomCode = async () => {
+        try {
+            await navigator.clipboard.writeText(code)
+            setCopiedCode(true)
+            setTimeout(() => setCopiedCode(false), 2000)
+        } catch (err) {
+            console.error('Failed to copy code:', err)
+        }
+    }
 
     useEffect(() => {
         const match = document.cookie.match(new RegExp('(^| )playerId=([^;]+)'))
@@ -70,39 +83,124 @@ export default function PlayerList({ code, initialPlayers }: PlayerListProps) {
     }, [code])
 
     return (
-        <main className="flex min-h-screen flex-col items-center gap-6 bg-purple-950 p-4 text-white">
-            <h1 className="text-4xl font-bold mb-8">Stopify</h1>
-            <h2 className="scroll-m-20 border-b pb-2 text-2xl font-semibold tracking-tight first:mt-0">
-                Sala: {code}
-            </h2>
-
-            <Card className="w-full max-w-sm">
-                <CardHeader>
-                    <CardTitle>Pessoas Presentes</CardTitle>
-                    <CardDescription>Quando todos ingressarem, clique em "Iniciar Partida"</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {players.map((player) => (
-                        <div className="flex items-center mb-4" key={player.id}>
-                            <Avatar>
-                                <AvatarFallback>{getInitials(player.name)}</AvatarFallback>
-                            </Avatar>
-                            <p className="ml-4 inline-block align-middle">{player.name}</p>
+        <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 flex items-center justify-center p-4">
+            <div className="container max-w-2xl">
+                {/* Header Section */}
+                <div className="text-center mb-8">
+                    <div className="flex items-center justify-center mb-4">
+                        <Avatar className="h-16 w-16 mr-4">
+                            <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold">
+                                <Type className="h-8 w-8" />
+                            </AvatarFallback>
+                        </Avatar>
+                        <div>
+                            <h1 className="text-4xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
+                                Stopify
+                            </h1>
+                            <p className="text-muted-foreground mt-1">A corrida das palavras</p>
                         </div>
-                    ))}
-                </CardContent>
-                <CardFooter className="flex justify-between gap-4">
-                    <form action={leaveRoom}>
-                        <input type="hidden" name="code" value={code} />
-                        <input type="hidden" name="playerId" value={playerId ?? ""} />
-                        <Button variant={"secondary"}>Sair da Sala</Button>
-                    </form>
-                    <form action={startGame}>
-                        <input type="hidden" name="code" value={code} />
-                        <Button>Iniciar Partida</Button>
-                    </form>
-                </CardFooter>
-            </Card>
-        </main>
+                    </div>
+                    
+                    {/* Room Code Display */}
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <Badge variant="outline" className="text-lg px-4 py-2 font-mono">
+                            {code}
+                        </Badge>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={copyRoomCode}
+                            className="h-8 w-8 p-0"
+                        >
+                            {copiedCode ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        {copiedCode ? "Código copiado!" : "Clique para copiar o código"}
+                    </p>
+                </div>
+
+                {/* Main Card */}
+                <Card className="backdrop-blur-sm bg-card/80 border-border/50 shadow-xl">
+                    <CardHeader className="text-center">
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                            <Users className="h-5 w-5" />
+                            <CardTitle className="text-2xl">Sala de Espera</CardTitle>
+                        </div>
+                        <CardDescription>
+                            Aguardando todos os jogadores entrarem para iniciar a partida
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold">Jogadores na sala</h3>
+                                <Badge variant="secondary" className="ml-2">
+                                    {players.length} {players.length === 1 ? 'jogador' : 'jogadores'}
+                                </Badge>
+                            </div>
+                            
+                            {players.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                                    <p className="text-muted-foreground">Nenhum jogador na sala ainda...</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-3">
+                                    {players.map((player, index) => (
+                                        <Card key={player.id} className="p-3">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar className="h-10 w-10">
+                                                    <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                                                        {getInitials(player.name)}
+                                                    </AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex-1">
+                                                    <p className="font-medium">{player.name}</p>
+                                                    {player.id === playerId && (
+                                                        <Badge variant="secondary" className="text-xs mt-1">Você</Badge>
+                                                    )}
+                                                </div>
+                                                <Badge variant="outline" className="text-xs">
+                                                    #{index + 1}
+                                                </Badge>
+                                            </div>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                    <CardFooter className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+                        <form action={leaveRoom} className="w-full sm:w-auto">
+                            <input type="hidden" name="code" value={code} />
+                            <input type="hidden" name="playerId" value={playerId ?? ""} />
+                            <Button variant="outline" className="w-full sm:w-auto">
+                                <LogOut className="h-4 w-4 mr-2" />
+                                Sair da Sala
+                            </Button>
+                        </form>
+                        <form action={startGame} className="w-full sm:w-auto">
+                            <input type="hidden" name="code" value={code} />
+                            <Button 
+                                className="w-full sm:w-auto" 
+                                disabled={players.length < 2}
+                                size="lg"
+                            >
+                                <Play className="h-4 w-4 mr-2" />
+                                Iniciar Partida
+                            </Button>
+                        </form>
+                    </CardFooter>
+                </Card>
+
+                {/* Footer */}
+                <div className="text-center mt-6">
+                    <p className="text-sm text-muted-foreground">
+                        Compartilhe o código <span className="font-mono font-semibold">{code}</span> com seus amigos
+                    </p>
+                </div>
+            </div>
+        </div>
     )
 }
