@@ -31,13 +31,13 @@ export default function Home() {
         </TabsList>
         <TabsContent value="create-room" className="flex flex-col gap-4 items-center mt-4 bg-purple-900 p-8 rounded-lg shadow-lg">
           <form action={createRoom} className="flex flex-col gap-4 min-w-xs">
-            <Input name="name" placeholder="Seu nome" className="text-white-900 " />
+            <Input name="playerName" placeholder="Seu nome" className="text-white-900 " />
             <Button >Criar Sala</Button>
           </form>
         </TabsContent>
         <TabsContent value="join-room" className="flex flex-col gap-4 items-center mt-4 bg-purple-900 p-8 rounded-lg shadow-lg">
           <form action={joinRoom} className="flex flex-col gap-4 min-w-xs">
-            <Input name="name" placeholder="Seu nome" className="max-w-xs" />
+            <Input name="playerName" placeholder="Seu nome" className="max-w-xs" />
             <InputOTP maxLength={4} name="code" value={code} onChange={value => handleCodeChange(value)} >
               <InputOTPGroup>
                 <InputOTPSlotDisabled defaultValue={"S"} />

@@ -1,5 +1,6 @@
 'use server'
 
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
@@ -7,7 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL
 export async function createRoom(formData: FormData) {
     const data = JSON.stringify(Object.fromEntries(formData.entries()))
 
-    const response = await fetch(`${API_URL}/rooms`, {
+    const response = await fetch(`${API_URL}/room`, {
         method: 'POST',
         body: data,
         headers: {
@@ -20,18 +21,22 @@ export async function createRoom(formData: FormData) {
     const json = await response.json()
     const code = json.code
 
+    const cookieStore = await cookies()
+    cookieStore.set("playerId", json.playerId, {
+        httpOnly: false, 
+        path: "/"
+    })
+
     redirect(`/rooms/${code}`)
 }
 
 export async function joinRoom(formData: FormData) {
     const data = JSON.stringify(Object.fromEntries(formData.entries()))
-    const code = "STOP_" + formData.get('code')
-    console.log('Joining room with code:', code)
+    const code = formData.get('code')
 
     if (!code) throw new Error('Code is required')
-    console.log(`➡️ ${API_URL}/rooms/${code}/join`)
 
-    const response = await fetch(`${API_URL}/rooms/${code}/join`, {
+    const response = await fetch(`${API_URL}/room/${code}/join`, {
         method: 'POST',
         body: data,
         headers: {
@@ -40,5 +45,65 @@ export async function joinRoom(formData: FormData) {
     })
     if (!response?.ok) throw new Error(`Failed to join room ${code} (${response.status})`)
 
+    const json = await response.json()
+    
+    const cookieStore = await cookies()
+    cookieStore.set("playerId", json.playerId, {
+        httpOnly: false, 
+        path: "/"
+    })
+
     redirect(`/rooms/${code}`)
 }
+
+export async function getPlayerAtRoom(code: string) {
+    const response = await fetch(`${API_URL}/room/${code}`)
+    if (!response?.ok) throw new Error(`Failed to get players at room ${code} (${response.status})`)
+    const json = await response.json()
+    return json.players
+}
+
+export async function startGame(formData: FormData) {
+    const code = formData.get('code')
+    const response = await fetch(`${API_URL}/rooms/${code}/start`, {
+        method: 'POST'
+    })
+    if (!response?.ok) throw new Error(`Failed to start game at room ${code} (${response.status})`)
+}
+
+export async function leaveRoom(formData: FormData) {
+    const code = formData.get('code')
+    const playerId = formData.get('playerId') as string
+    const response = await fetch(`${API_URL}/room/${code}/leave`, {
+        method: 'POST',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId })
+    })
+    if (!response?.ok) throw new Error(`Failed to leave room ${code} (${response.status})`)
+    redirect(`/`)
+}
+
+
+export async function submitAnswers(formData: FormData) {
+    const roomId = formData.get("roomId") as string
+    const letter = formData.get("letter") as string 
+    const playerId = formData.get("playerId") as string
+    const answers: Record<string, string> = {}
+    formData.forEach((value, key) => {
+        if (key.startsWith("answer-")) {
+            const category = key.replace("answer-", "")
+            answers[category] = value.toString()
+        }
+    })
+
+    const res = await fetch(`${API_URL}/rooms/${roomId}/answers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, letter, playerId, answers }),
+    })
+
+    if (!res.ok) {
+        throw new Error("Falha ao enviar respostas")
+    }
+}
+
