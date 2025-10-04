@@ -4,7 +4,7 @@ interface Player {
 }
 
 interface RoundStartEvent {
-  roomId: string
+  code: string
   letter: string
   endsAt: string
   categories: string[]

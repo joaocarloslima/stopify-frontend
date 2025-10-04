@@ -65,7 +65,7 @@ export async function getPlayerAtRoom(code: string) {
 
 export async function startGame(formData: FormData) {
     const code = formData.get('code')
-    const response = await fetch(`${API_URL}/rooms/${code}/start`, {
+    const response = await fetch(`${API_URL}/room/${code}/start`, {
         method: 'POST'
     })
     if (!response?.ok) throw new Error(`Failed to start game at room ${code} (${response.status})`)
@@ -85,7 +85,7 @@ export async function leaveRoom(formData: FormData) {
 
 
 export async function submitAnswers(formData: FormData) {
-    const roomId = formData.get("roomId") as string
+    const code = formData.get("roomId") as string
     const letter = formData.get("letter") as string 
     const playerId = formData.get("playerId") as string
     const answers: Record<string, string> = {}
@@ -96,10 +96,10 @@ export async function submitAnswers(formData: FormData) {
         }
     })
 
-    const res = await fetch(`${API_URL}/rooms/${roomId}/answers`, {
+    const res = await fetch(`${API_URL}/room/answers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId, letter, playerId, answers }),
+        body: JSON.stringify({ code, letter, playerId, answers }),
     })
 
     if (!res.ok) {

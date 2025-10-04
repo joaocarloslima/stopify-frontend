@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,13 +9,34 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useGameStore } from "@/stores/game-store"
 import { submitAnswers } from "@/app/actions"
+import { useRouter } from "next/navigation"
 import { Type, Clock, Zap, Home, Send } from "lucide-react"
 
 export default function RoundPage() {
     const round = useGameStore((state) => state.currentRound)
+    const router = useRouter()
     const [timeLeft, setTimeLeft] = useState<number>(0)
     const [answers, setAnswers] = useState<Record<string, string>>({})
     const [isSubmitted, setIsSubmitted] = useState(false)
+    const [playerId, setPlayerId] = useState<string | null>(null)
+    
+    const answersRef = useRef<Record<string, string>>({})
+    const isSubmittedRef = useRef(false)
+
+    useEffect(() => {
+        const match = document.cookie.match(new RegExp('(^| )playerId=([^;]+)'))
+        if (match) {
+            setPlayerId(match[2])
+        }
+    }, [])
+
+    useEffect(() => {
+        answersRef.current = answers
+    }, [answers])
+
+    useEffect(() => {
+        isSubmittedRef.current = isSubmitted
+    }, [isSubmitted])
 
     useEffect(() => {
         if (!round) return
@@ -25,17 +46,106 @@ export default function RoundPage() {
             const now = Date.now()
             const diff = Math.max(0, Math.floor((endsAt - now) / 1000))
             setTimeLeft(diff)
-            if (diff <= 0) clearInterval(interval)
+            
+            if (diff <= 0) {
+                clearInterval(interval)
+                console.log("Tempo esgotado, enviando respostas")
+                submitCurrentAnswers()
+            }
         }, 1000)
 
         return () => clearInterval(interval)
-    }, [round])
+    }, [round, playerId]) // Adicionado playerId para garantir que submitCurrentAnswers tenha acesso
+
+    useEffect(() => {
+        if (!round || !playerId) return
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL
+        const eventSource = new EventSource(`${API_URL}/stream/room/${round.code}`)
+
+        console.log(`Conectando SSE para sala: ${round.code}`)
+
+        // Escutar todos os eventos para debug
+        eventSource.onmessage = (event) => {
+            console.log("SSE message received:", event)
+        }
+
+        // Eventos específicos que podem indicar fim do jogo
+        eventSource.addEventListener("game.ended", (event) => {
+            console.log("Game ended event:", event)
+            
+            // Se ainda não enviou as respostas, enviar agora
+            if (!isSubmittedRef.current) {
+                submitCurrentAnswers()
+            } else {
+                // Se já enviou, apenas redirecionar para resultado
+                console.log("Jogo terminou, redirecionando para resultado...")
+                router.push(`/rooms/${round.code}/result`)
+            }
+        })
+
+        // Event listener específico para redirecionamento (caso o servidor envie um evento diferente)
+        eventSource.addEventListener("redirect.result", (event) => {
+            console.log("Redirect to result event:", event)
+            router.push(`/rooms/${round.code}/result`)
+        })
+
+        // Escutar também por eventos de fim de round ou tempo esgotado
+        eventSource.addEventListener("round.ended", (event) => {
+            console.log("Round ended event:", event)
+            router.push(`/rooms/${round.code}/result`)
+        })
+
+        eventSource.addEventListener("time.expired", (event) => {
+            console.log("Time expired event:", event)
+            router.push(`/rooms/${round.code}/result`)
+        })
+
+        eventSource.onerror = (err) => {
+            console.error("SSE error:", err)
+            eventSource.close()
+        }
+
+        eventSource.onopen = () => {
+            console.log("SSE connection opened")
+        }
+
+        return () => {
+            console.log("Fechando conexão SSE")
+            eventSource.close()
+        }
+    }, [round, playerId]) // Removido answers e isSubmitted das dependências
 
     const handleAnswerChange = (category: string, value: string) => {
-        setAnswers(prev => ({
-            ...prev,
+        const newAnswers = {
+            ...answers,
             [category]: value
-        }))
+        }
+        setAnswers(newAnswers)
+        answersRef.current = newAnswers // Manter ref atualizada
+    }
+
+    const submitCurrentAnswers = () => {
+        if (isSubmittedRef.current || !playerId || !round) return
+        
+        console.log("Enviando respostas automaticamente:", answersRef.current)
+        
+        const formData = new FormData()
+        
+        round.categories.forEach(category => {
+            formData.append(`answer-${category}`, answersRef.current[category] || '')
+        })
+        
+        formData.append('roomId', round.code)
+        formData.append('playerId', playerId)
+        formData.append('letter', round.letter)
+        
+        submitAnswers(formData)
+        setIsSubmitted(true)
+        isSubmittedRef.current = true
+        
+        // Remover redirecionamento automático daqui - deixar apenas para eventos SSE
+        // O redirecionamento será feito quando o evento game.ended for recebido
     }
 
     const getProgressColor = () => {
@@ -78,8 +188,17 @@ export default function RoundPage() {
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         setIsSubmitted(true)
+        isSubmittedRef.current = true
         const formData = new FormData(e.target as HTMLFormElement)
         submitAnswers(formData)
+        
+        // Fallback: redirecionar após um tempo se não receber evento SSE
+        setTimeout(() => {
+            if (round) {
+                console.log("Fallback redirect - não recebeu evento SSE")
+                router.push(`/rooms/${round.code}/result`)
+            }
+        }, 3000) // 3 segundos de espera para evento SSE
     }
 
     const filledAnswers = Object.values(answers).filter(answer => answer.trim().length > 0).length
@@ -100,7 +219,7 @@ export default function RoundPage() {
                         <div>
                             <h1 className="text-2xl font-bold">Stopify</h1>
                             <Badge variant="outline" className="text-xs">
-                                Sala {round.roomId}
+                                Sala {round.code}
                             </Badge>
                         </div>
                     </div>
@@ -187,8 +306,8 @@ export default function RoundPage() {
                                 ))}
                             </div>
                             
-                            <input type="hidden" name="roomId" value={round.roomId} />
-                            <input type="hidden" name="playerId" value="123e4567" />
+                            <input type="hidden" name="roomId" value={round.code} />
+                            <input type="hidden" name="playerId" value={playerId ?? ""} />
                             <input type="hidden" name="letter" value={round.letter} />
 
                             <div className="flex gap-4 pt-4">
